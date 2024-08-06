@@ -8,7 +8,7 @@ export type Opts = {
 	headers?: Record<string, string>;
 	body?: string | Record<string, any> | any[] | null | boolean | number;
 	proxy?: string;
-	shouldRetry?(error: string): boolean | PromiseLike<boolean>;
+	shouldRetryOnError?(error: string): boolean | PromiseLike<boolean>;
 	maxRetries?: number;
 };
 
@@ -16,7 +16,7 @@ export type InstanceOpts = {
 	baseUrl?: string;
 	headers?: Record<string, string>;
 	proxy?: string;
-	shouldRetry?(error: string): boolean | PromiseLike<boolean>;
+	shouldRetryOnError?(error: string): boolean | PromiseLike<boolean>;
 	maxRetries?: number;
 };
 
@@ -105,18 +105,25 @@ async function curl<T>(url: string, opts?: Opts): Promise<CurlResponse<T>> {
 
 					resolve({ statusCode, headers, body });
 				} else {
-					retries++;
-					if (retries < MAX_RETRIES && opts?.shouldRetry && (await opts.shouldRetry(error))) {
-						return doRequest();
-					}
-
 					reject(new CurlError(error, { url, opts, retries, MAX_RETRIES, exitCode: code, curlArgs: args }));
 				}
 			});
 		});
 	};
 
-	return doRequest();
+	while (retries < MAX_RETRIES) {
+		try {
+			return await doRequest();
+		} catch (error: any) {
+			if (opts?.shouldRetryOnError && (await opts.shouldRetryOnError(error.message))) {
+				retries++;
+			} else {
+				throw error;
+			}
+		}
+	}
+
+	throw new CurlError('Max retries reached', { url, opts, retries, MAX_RETRIES, exitCode: -1, curlArgs: args });
 }
 
 function createInstance(instanceOpts: InstanceOpts) {
