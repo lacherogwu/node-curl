@@ -1,0 +1,40 @@
+{
+	"name": "@lachero/node-curl",
+	"version": "0.0.1",
+	"description": "curl NodeJS wrapper",
+	"main": "dist/index.js",
+	"scripts": {
+		"dev": "tsx --watch src/index.ts",
+		"build": "rm -rf dist && tsup src/index.ts --format esm --dts",
+		"build:watch": "rm -rf dist && tsup src/index.ts --watch --format esm --dts"
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"curl",
+		"http",
+		"https",
+		"request"
+	],
+	"author": "LacheRo`",
+	"license": "MIT",
+	"type": "module",
+	"devDependencies": {
+		"@types/lodash.merge": "^4.6.9",
+		"@types/node": "^22.1.0",
+		"tsup": "^8.2.4",
+		"tsx": "^4.16.5",
+		"typescript": "^5.5.4"
+	},
+	"dependencies": {
+		"lodash.merge": "^4.6.2"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/lacherogwu/node-curl"
+	}
+}
