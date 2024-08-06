@@ -1,12 +1,13 @@
 {
 	"name": "@lachero/node-curl",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"description": "curl NodeJS wrapper",
 	"main": "dist/index.js",
 	"scripts": {
 		"dev": "tsx --watch src/index.ts",
 		"build": "rm -rf dist && tsup src/index.ts --format esm --dts",
-		"build:watch": "rm -rf dist && tsup src/index.ts --watch --format esm --dts"
+		"build:watch": "rm -rf dist && tsup src/index.ts --watch --format esm --dts",
+		"publish": "npm run build && npm publish"
 	},
 	"files": [
 		"dist"
