@@ -3,11 +3,13 @@ import merge from 'lodash.merge';
 import CurlError from './CurlError';
 export { default as CurlError } from './CurlError';
 
-type Opts = {
+export type Opts = {
 	method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
 	headers?: Record<string, string>;
 	body?: string | Record<string, any> | any[] | null | boolean | number;
 	proxy?: string;
+	shouldRetry?(error: string): boolean | PromiseLike<boolean>;
+	maxRetries?: number;
 };
 
 export type InstanceOpts = {
@@ -54,53 +56,65 @@ async function curl<T>(url: string, opts?: Opts): Promise<CurlResponse<T>> {
 		args.push('--data', body.toString());
 	}
 
-	const curl = spawn('curl', args);
+	const MAX_RETRIES = opts?.maxRetries ?? 3;
+	let retries = 0;
 
-	return new Promise((resolve, reject) => {
-		let data = '';
-		let error = '';
+	const doRequest = async (): Promise<CurlResponse<T>> => {
+		const curl = spawn('curl', args);
 
-		curl.stdout.on('data', chunk => {
-			data += chunk;
-		});
+		return new Promise((resolve, reject) => {
+			let data = '';
+			let error = '';
 
-		curl.stderr.on('data', chunk => {
-			error += chunk;
-		});
+			curl.stdout.on('data', chunk => {
+				data += chunk;
+			});
 
-		curl.on('close', code => {
-			if (code === 0) {
-				const blocks = data.split('\r\n\r\n');
-				if (opts?.proxy) {
-					blocks.shift();
-				}
-				const [headAsString, bodyAsString] = blocks as [string, string];
-				const headLines = headAsString.split('\r\n');
-				const statusCode = parseInt(headLines.shift()?.split(' ')[1] ?? '0');
+			curl.stderr.on('data', chunk => {
+				error += chunk;
+			});
 
-				const headers = headLines.reduce((acc, line) => {
-					const [key, value] = line.split(': ') as [string, string];
-					const keyLowerCase = key.toLowerCase();
-					if (keyLowerCase === 'set-cookie') {
-						acc[keyLowerCase] = acc[keyLowerCase] ?? [];
-						acc[keyLowerCase].push(value);
-					} else {
-						acc[keyLowerCase] = value;
+			curl.on('close', async code => {
+				if (code === 0) {
+					const blocks = data.split('\r\n\r\n');
+					if (opts?.proxy) {
+						blocks.shift();
 					}
-					return acc;
-				}, {} as CurlHeaders);
+					const [headAsString, bodyAsString] = blocks as [string, string];
+					const headLines = headAsString.split('\r\n');
+					const statusCode = parseInt(headLines.shift()?.split(' ')[1] ?? '0');
 
-				let body: T = bodyAsString as unknown as T;
-				if (headers['content-type']?.startsWith('application/json')) {
-					body = JSON.parse(bodyAsString) as T;
+					const headers = headLines.reduce((acc, line) => {
+						const [key, value] = line.split(': ') as [string, string];
+						const keyLowerCase = key.toLowerCase();
+						if (keyLowerCase === 'set-cookie') {
+							acc[keyLowerCase] = acc[keyLowerCase] ?? [];
+							acc[keyLowerCase].push(value);
+						} else {
+							acc[keyLowerCase] = value;
+						}
+						return acc;
+					}, {} as CurlHeaders);
+
+					let body: T = bodyAsString as unknown as T;
+					if (headers['content-type']?.startsWith('application/json')) {
+						body = JSON.parse(bodyAsString) as T;
+					}
+
+					resolve({ statusCode, headers, body });
+				} else {
+					retries++;
+					if (retries < MAX_RETRIES && opts?.shouldRetry && (await opts.shouldRetry(error))) {
+						return doRequest();
+					}
+
+					reject(new CurlError(error, { url, opts, retries, MAX_RETRIES, exitCode: code, curlArgs: args }));
 				}
-
-				resolve({ statusCode, headers, body });
-			} else {
-				reject(new CurlError(error));
-			}
+			});
 		});
-	});
+	};
+
+	return doRequest();
 }
 
 function createInstance(instanceOpts: InstanceOpts) {
