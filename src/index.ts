@@ -16,6 +16,8 @@ export type InstanceOpts = {
 	baseUrl?: string;
 	headers?: Record<string, string>;
 	proxy?: string;
+	shouldRetry?(error: string): boolean | PromiseLike<boolean>;
+	maxRetries?: number;
 };
 
 export type CurlHeaders = { [key: string]: string } & {
